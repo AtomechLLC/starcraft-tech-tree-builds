@@ -64,7 +64,7 @@
     const main = h('section', { class: 'bo-main' });
     main.append(h('header', { class: 'bo-head' },
       h('div', {}, h('h2', {}, build.name), h('p', { class: 'muted' }, build.desc)),
-      h('span', { class: 'chip static' }, build.matchup)));
+      h('p', { class: 'bo-matchup' }, h('span', { class: 'muted' }, 'Matchup'), h('strong', {}, build.matchup))));
 
     // Controls.
     const workerName = byId.get(SIM.RACE[race].worker).name;
@@ -88,11 +88,14 @@
     sim.rows.forEach((r) => { if (r.node && !r.skipped) { tm += r.node.m || 0; tg += r.node.g || 0; } });
     const workersMade = Math.round(sim.spentWorkersM / byId.get(SIM.RACE[race].worker).m);
     main.append(h('div', { class: 'bo-stats' },
+      stat(fmt(sim.finish), 'Build complete', 'lead'),
       stat(res(tm, tg), 'Build cost (minerals / gas)'),
       stat(res(tm + sim.spentWorkersM, tg), `Incl. ${workersMade} ${workerName}s`),
-      stat(fmt(sim.finish), 'Build complete'),
       stat(sim.workers, `${workerName}s at the end`),
       stat(res(Math.round(sim.incomePerMin.m), Math.round(sim.incomePerMin.g)), 'Income per minute at the end')));
+
+    main.append(h('h3', { class: 'bo-sub' }, 'Timeline'), timeline(sim.rows, sim.finish));
+    main.append(h('h3', { class: 'bo-sub' }, 'Steps'));
 
     // Steps, optionally interleaved with every worker in start-time order.
     let cm = 0, cg = 0;
@@ -105,13 +108,13 @@
       if (line.kind === 'worker') {
         cm += wNode.m;
         tbody.append(h('tr', { class: 'worker-row' },
-          h('td', { class: 'num' }, ''),
-          h('td', { class: 'num' }, line.w.sup),
+          h('td', { class: 'num col-num' }, ''),
           h('td', {}, h('span', { class: 'bo-item' }, wIcon ? h('img', { src: wIcon, alt: '' }) : null, `${wNode.name} #${line.k + 1 + sim.startWorkers}`)),
-          h('td', {}, res(wNode.m, 0)),
-          h('td', {}, res(cm, cg)),
           h('td', { class: 'time' }, fmt(line.w.start)),
-          h('td', { class: 'time muted' }, fmt(line.w.end))));
+          h('td', { class: 'time muted' }, fmt(line.w.end)),
+          h('td', { class: 'num' }, line.w.sup),
+          h('td', {}, res(wNode.m, 0)),
+          h('td', { class: 'col-total' }, res(cm, cg))));
         return;
       }
       const { r, i } = line;
@@ -119,19 +122,23 @@
       if (n && !r.skipped) { cm += n.m || 0; cg += n.g || 0; }
       const icon = n && App.icon(n.id);
       tbody.append(h('tr', { class: r.skipped ? 'skipped' : '' },
-        h('td', { class: 'num' }, i + 1),
-        h('td', { class: 'num' }, r.sup),
+        h('td', { class: 'num col-num' }, i + 1),
         h('td', {}, h('button', { type: 'button', class: 'bo-item', title: 'Show in tech tree', onclick: () => App.openInTree(r.id) },
           icon ? h('img', { src: icon, alt: '' }) : null,
-          (n ? n.name : r.id) + (r.of > 1 ? ` (${r.idx + 1}/${r.of})` : '')),
+          h('span', {}, (n ? n.name : r.id) + (r.of > 1 ? ` (${r.idx + 1}/${r.of})` : '')),
+          h('span', { class: 'to-tree', 'aria-hidden': 'true' }, '↗')),
           r.skipped ? h('span', { class: 'warn' }, ' ' + r.skipped) : null),
-        h('td', {}, n ? res(n.m || 0, n.g || 0) : '—'),
-        h('td', {}, res(cm, cg)),
         h('td', { class: 'time' }, fmt(r.start)),
-        h('td', { class: 'time muted' }, fmt(r.end))));
+        h('td', { class: 'time muted' }, fmt(r.end)),
+        h('td', { class: 'num' }, r.sup),
+        h('td', {}, n ? res(n.m || 0, n.g || 0) : '—'),
+        h('td', { class: 'col-total' }, res(cm, cg))));
     });
     main.append(h('div', { class: 'bo-table-wrap' }, h('table', { class: 'bo-table bo-steps' },
-      h('thead', {}, h('tr', {}, ['#', 'Supply', 'Step', 'Cost', 'Running total', 'Starts', 'Done'].map((c) => h('th', {}, c)))),
+      h('thead', {}, h('tr', {},
+        h('th', { class: 'col-num' }, '#'), h('th', {}, 'Step'), h('th', {}, 'Starts'), h('th', {}, 'Done'),
+        h('th', {}, 'Supply'), h('th', {}, h('span', { class: 'res-head' }, 'Cost ', h('i', { class: 'm' }, 'min'), ' / ', h('i', { class: 'g' }, 'gas'))),
+        h('th', { class: 'col-total' }, 'Running total'))),
       tbody)));
 
     // How the timing moves with worker count.
@@ -149,9 +156,10 @@
           sims.map((s) => h('td', { class: 'time' + (s.cap === opts.workerTarget ? ' cur' : '') }, fmt(s.sim.finish)))),
         h('tr', { class: 'total' }, h('td', {}, 'Income per minute at the end'),
           sims.map((s) => h('td', { class: s.cap === opts.workerTarget ? 'cur' : '' }, Math.round(s.sim.incomePerMin.m) + ' / ' + Math.round(s.sim.incomePerMin.g))))));
+    const cmpWrap = h('div', { class: 'bo-table-wrap' }, cmp);
     main.append(h('h3', { class: 'bo-sub' }, `How the timings change with the number of ${workerName}s`),
       h('p', { class: 'muted small' }, `Start time of each step if you stop making ${workerName}s at the given count. Fewer ${workerName}s means steps come earlier but income stays lower.`),
-      h('div', { class: 'bo-table-wrap' }, cmp));
+      cmpWrap);
 
     // Assumptions.
     const field = (label, get, set, step = 0.01) => h('label', {}, label + ' ',
@@ -167,10 +175,50 @@
       h('button', { type: 'button', onclick: () => { opts.economy = {}; render(); } }, 'Reset to defaults')));
 
     root.append(main);
+    // On narrow screens, bring the column for the current worker count into view.
+    const cur = cmp.querySelector('th.cur');
+    if (cur && cmpWrap.scrollWidth > cmpWrap.clientWidth) {
+      const first = cmp.querySelector('th').offsetWidth;
+      cmpWrap.scrollLeft = Math.max(0, cur.offsetLeft - first - (cmpWrap.clientWidth - first - cur.offsetWidth) / 2);
+    }
   }
 
-  function stat(val, label) {
-    return h('div', { class: 'stat' }, h('b', {}, val), h('small', {}, label));
+  function stat(val, label, cls) {
+    return h('div', { class: 'stat' + (cls ? ' ' + cls : '') }, h('b', {}, val), h('small', {}, label));
+  }
+
+  // One bar per step from start to finish on a shared clock, coloured by type like the tree.
+  function timeline(rows, finish) {
+    const TYPE = { b: 'building', u: 'unit', g: 'upgrade' };
+    const steps = rows.filter((r) => r.node && !r.skipped && r.start != null && r.end != null);
+    const end = Math.max(finish || 0, ...steps.map((r) => r.end));
+    const step = end > 420 ? 120 : end > 210 ? 60 : 30;
+    const span = Math.ceil(end / step) * step || 60;
+    const pct = (t) => (t / span * 100).toFixed(2) + '%';
+    const ticks = [];
+    for (let t = 0; t <= span; t += step) ticks.push(t);
+    const axis = h('div', { class: 'tl-axis', 'aria-hidden': 'true' },
+      ticks.map((t) => h('span', { style: `left:${pct(t)}` }, fmt(t))));
+    const grid = ticks.map((t) => h('i', { class: 'tl-grid', style: `left:${pct(t)}` }));
+    const list = h('ol', { class: 'tl-rows' }, steps.map((r) => {
+      const icon = App.icon(r.node.id);
+      const name = r.node.name + (r.of > 1 ? ` (${r.idx + 1}/${r.of})` : '');
+      return h('li', { class: 'tl-row' },
+        h('button', { type: 'button', class: 'tl-name', title: 'Show in tech tree', onclick: () => App.openInTree(r.id) },
+          icon ? h('img', { src: icon, alt: '' }) : null, h('span', {}, name)),
+        h('div', { class: 'tl-track' }, grid.map((g) => g.cloneNode()),
+          h('span', {
+            class: 'tl-bar ' + TYPE[r.node.t], style: `left:${pct(r.start)};width:${pct(Math.max(1, r.end - r.start))}`,
+            title: `${name}: ${fmt(r.start)} to ${fmt(r.end)}`,
+          })));
+    }));
+    return h('div', { class: 'tl', role: 'img', 'aria-label': `Timeline of ${steps.length} steps, finishing at ${fmt(end)}` },
+      h('div', { class: 'tl-head' }, h('span', {}), axis), list,
+      h('div', { class: 'tl-key' },
+        h('span', {}, h('i', { class: 'tl-sw building' }), 'Building'),
+        h('span', {}, h('i', { class: 'tl-sw unit' }), 'Unit'),
+        h('span', {}, h('i', { class: 'tl-sw upgrade' }), 'Upgrade'),
+        h('span', { class: 'muted' }, 'Bars run from when a step starts to when it finishes.')));
   }
 
   App.onChange(render);

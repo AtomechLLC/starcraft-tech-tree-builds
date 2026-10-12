@@ -16,10 +16,15 @@
   const NODE_W = 214, NODE_H = 44, COL_GAP = 90, ROW_GAP = 12, PAD = 40, HEADER = 34;
   const TYPE = { b: 'building', u: 'unit', g: 'upgrade' };
   const SECTION = [
-    { cls: 'direct', label: '✔ Unlocked directly', badge: '✔ Unlocked directly' },
-    { cls: 'addon', label: '🔧 Requires add-on', badge: '🔧 Requires add-on' },
-    { cls: 'research', label: '⚗ Requires research', badge: '⚗ Unlocked by research' },
+    { cls: 'direct', glyph: 'check', label: 'Unlocked directly', badge: 'Unlocked directly' },
+    { cls: 'addon', glyph: 'wrench', label: 'Requires add-on', badge: 'Requires add-on' },
+    { cls: 'research', glyph: 'flask', label: 'Requires research', badge: 'Unlocked by research' },
   ];
+  // Below this zoom the cost line is hidden and names are drawn larger, so the overview stays legible.
+  const LOD_ZOOM = 0.62;
+  // The opening view never starts smaller than this; Fit can still show the whole tree.
+  const MIN_START_ZOOM = 0.78;
+  const mobile = () => window.matchMedia('(max-width: 860px)').matches;
 
   const $ = (id) => document.getElementById(id);
   const svg = $('tree'), viewport = $('viewport');
@@ -56,6 +61,17 @@
       ? '/builds' + (state.build ? '/' + state.build : '')
       : (state.selected ? '/' + state.selected : ''));
     if (location.hash !== h) history.replaceState(null, '', h);
+  }
+
+  // Inline SVG glyph that references a <symbol> in the tree's <defs>.
+  function glyph(name, cls) {
+    const s = document.createElementNS(NS, 'svg');
+    s.setAttribute('class', 'gl' + (cls ? ' ' + cls : ''));
+    s.setAttribute('aria-hidden', 'true');
+    const u = document.createElementNS(NS, 'use');
+    u.setAttribute('href', '#g-' + name);
+    s.appendChild(u);
+    return s;
   }
 
   function el(tag, attrs, parent) {
@@ -178,7 +194,8 @@
         class: 'sec-band ' + s.kind.cls,
         x: s.x - 8, y: s.top - 4, width: NODE_W + 16, height: s.bottom - s.top + 12, rx: 8,
       }, gCols);
-      const t = el('text', { class: 'sec-label ' + s.kind.cls, x: s.x, y: s.top + 13 }, gCols);
+      el('use', { class: 'sec-glyph ' + s.kind.cls, href: '#g-' + s.kind.glyph, x: s.x, y: s.top + 3, width: 11, height: 11 }, gCols);
+      const t = el('text', { class: 'sec-label ' + s.kind.cls, x: s.x + 15, y: s.top + 13 }, gCols);
       t.textContent = s.kind.label;
     });
 
@@ -201,30 +218,83 @@
       const g = el('g', { class: 'node ' + TYPE[n.t] + (gated ? ' gated' : '') + (addonGated ? ' addon-gated' : ''), transform: `translate(${p.x},${p.y})`, tabindex: 0, role: 'button', 'aria-label': n.name }, gNodes);
       el('rect', { class: 'box', width: NODE_W, height: NODE_H, rx: 7 }, g);
       el('rect', { class: 'tag', width: 4, height: NODE_H - 10, x: 5, y: 5, rx: 2 }, g);
+      el('use', { class: 'type-mark', href: '#g-' + TYPE[n.t], x: NODE_W - 15, y: NODE_H - 15, width: 9, height: 9 }, g);
       const icon = iconFor(n.id);
-      if (icon) el('image', { class: 'icon', href: icon, x: 13, y: 5, width: 34, height: 34, preserveAspectRatio: 'xMidYMid slice', 'clip-path': 'url(#iconClip)' }, g);
+      if (icon) {
+        el('rect', { class: 'icon-bg', x: 13, y: 5, width: 34, height: 34, rx: 5 }, g);
+        el('image', { class: 'icon', href: icon, x: 13, y: 5, width: 34, height: 34, preserveAspectRatio: 'xMidYMid slice', 'clip-path': 'url(#iconClip)' }, g);
+      }
       const TX = icon ? 54 : 18;
+      const badgeW = gated || addonGated ? 20 : 0;
       const name = el('text', { class: 'name', x: TX, y: 19 }, g);
       name.textContent = n.name;
       const meta = el('text', { class: 'meta', x: TX, y: 34 }, g);
       meta.textContent = costText(n) + (n.via && !/Calldown/.test(n.via) ? '  ·  ' + n.via : '');
+      g._text = { name, meta, full: n.name, metaFull: meta.textContent, maxName: NODE_W - TX - 8 - badgeW, maxLow: NODE_W - TX - 22, maxMeta: NODE_W - TX - 20 };
       if (gated) {
-        const badge = el('text', { class: 'lock', x: NODE_W - 8, y: 17, 'text-anchor': 'end' }, g);
-        badge.textContent = '⚗';
-        el('title', {}, g).textContent = 'Needs research: ' + graph.gates.get(n.id).map((r) => graph.byId.get(r).name).join(', ');
+        el('use', { class: 'lock', href: '#g-flask', x: NODE_W - 20, y: 6, width: 13, height: 13 }, g);
+        el('title', {}, g).textContent = n.name + '. Needs research: ' + graph.gates.get(n.id).map((r) => graph.byId.get(r).name).join(', ');
       } else if (addonGated) {
-        const badge = el('text', { class: 'addon-mark', x: NODE_W - 8, y: 17, 'text-anchor': 'end' }, g);
-        badge.textContent = '🔧';
-        el('title', {}, g).textContent = 'Needs add-on: ' + graph.addonGates.get(n.id).map((r) => graph.byId.get(r).name).join(', ');
+        el('use', { class: 'addon-mark', href: '#g-wrench', x: NODE_W - 20, y: 6, width: 13, height: 13 }, g);
+        el('title', {}, g).textContent = n.name + '. Needs add-on: ' + graph.addonGates.get(n.id).map((r) => graph.byId.get(r).name).join(', ');
+      } else {
+        el('title', {}, g).textContent = n.name;
       }
       g.addEventListener('click', (ev) => { ev.stopPropagation(); select(n.id); });
       g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(n.id); } });
       graph.nodeEls.set(n.id, g);
     });
+    graph.lod = null;
+    fitLabels();
+    applyLod();
 
     $('names').replaceChildren(...DATA[state.race].nodes.map((n) => { const o = document.createElement('option'); o.value = n.name; return o; }));
     if (state.selected && !graph.vis.has(state.selected)) state.selected = null;
     applySelection();
+  }
+
+  // Trim a label to fit its box. Measuring needs the SVG laid out, so this is re-run when the page is shown.
+  function ellipsize(t, full, max) {
+    t.textContent = full;
+    const len = t.getComputedTextLength();
+    if (!len || len <= max) return full;
+    let lo = 0, hi = full.length;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      t.textContent = full.slice(0, mid).trimEnd() + '…';
+      if (t.getComputedTextLength() <= max) lo = mid; else hi = mid - 1;
+    }
+    return (t.textContent = full.slice(0, lo).trimEnd() + '…');
+  }
+  function fitLabels() {
+    if (!graph || state.page !== 'trees') return;
+    graph.lod = null;
+    svg.classList.remove('lod-low');
+    graph.nodeEls.forEach((g) => {
+      const tx = g._text;
+      tx.short = ellipsize(tx.name, tx.full, tx.maxName);
+      tx.lowShort = null;
+      ellipsize(tx.meta, tx.metaFull, tx.maxMeta);
+    });
+    applyLod();
+  }
+  // Level of detail: zoomed out, drop the cost line and draw a larger name centred in the box.
+  function applyLod() {
+    if (!graph) return;
+    const low = state.view.k < LOD_ZOOM;
+    if (graph.lod === low) return;
+    graph.lod = low;
+    svg.classList.toggle('lod-low', low);
+    graph.nodeEls.forEach((g) => {
+      const tx = g._text;
+      tx.name.setAttribute('y', low ? 27 : 19);
+      if (low) {
+        if (tx.lowShort == null && tx.short != null) tx.lowShort = ellipsize(tx.name, tx.full, tx.maxLow);
+        tx.name.textContent = tx.lowShort || tx.full;
+      } else {
+        tx.name.textContent = tx.short || tx.full;
+      }
+    });
   }
 
   function iconFor(id) {
@@ -251,7 +321,8 @@
     writeHash();
     if (!id) {
       svgRoot.classList.remove('dim');
-      $('panelEmpty').hidden = false; $('panelBody').hidden = true;
+      $('panelEmpty').hidden = false; $('panelBody').hidden = true; $('panelClose').hidden = true;
+      document.body.classList.remove('has-sel');
       return;
     }
     const anc = walk(id, graph.parents), desc = walk(id, graph.children);
@@ -265,6 +336,9 @@
       if (up || down) e.el.classList.add('hl');
     });
     renderPanel(id, anc, desc);
+    $('panelClose').hidden = false;
+    document.body.classList.add('has-sel');
+    $('panel').scrollTop = 0;
   }
 
   function chip(id, via) {
@@ -299,12 +373,15 @@
       img.className = 'panel-icon'; img.src = icon; img.alt = '';
       body.append(img);
     }
-    body.append(kind, h);
+    kind.prepend(glyph(TYPE[n.t]));
     const unlock = document.createElement('span');
     const kindInfo = SECTION[graph.sec(id)];
     unlock.className = 'unlock ' + kindInfo.cls;
-    unlock.textContent = n.t === 'g' ? '⚗ Research' : n.via === 'Add-on' ? '🔧 Add-on building' : kindInfo.badge;
-    kind.after(unlock);
+    const unlockGlyph = n.t === 'g' ? 'flask' : n.via === 'Add-on' ? 'wrench' : kindInfo.glyph;
+    unlock.append(glyph(unlockGlyph), n.t === 'g' ? 'Research' : n.via === 'Add-on' ? 'Add-on building' : kindInfo.badge);
+    const badges = document.createElement('div'); badges.className = 'badges';
+    badges.append(kind, unlock);
+    body.append(badges, h);
     if (n.note) { const p = document.createElement('p'); p.className = 'muted'; p.textContent = n.note; body.appendChild(p); }
 
     const stats = document.createElement('div'); stats.className = 'stats';
@@ -333,7 +410,8 @@
       const h3 = document.createElement('h3'); h3.textContent = 'Full path (' + anc.size + ' steps)'; body.appendChild(h3);
       const ol = document.createElement('ol'); ol.className = 'path';
       [...anc].sort((a, b) => graph.depth.get(a) - graph.depth.get(b)).forEach((a) => {
-        const li = document.createElement('li'); const link = document.createElement('a');
+        const li = document.createElement('li'); const link = document.createElement('button');
+        link.type = 'button'; link.className = 'link';
         link.textContent = graph.byId.get(a).name; link.addEventListener('click', () => select(a, true));
         li.appendChild(link); ol.appendChild(li);
       });
@@ -362,19 +440,46 @@
   function applyView() {
     const v = state.view;
     viewport.setAttribute('transform', `translate(${v.x},${v.y}) scale(${v.k})`);
+    applyLod();
   }
+  // The part of the canvas not covered by the key or (on phones) the details sheet.
+  function clearArea() {
+    const r = svg.getBoundingClientRect();
+    let bottom = r.height;
+    const legend = $('legend');
+    if (legend.open && !mobile()) bottom -= legend.offsetHeight + 16;
+    if (mobile() && document.body.classList.contains('has-sel')) {
+      // Use the sheet's resting height; it may still be sliding in.
+      bottom = Math.min(bottom, window.innerHeight - $('panel').offsetHeight - r.top);
+    }
+    return { w: r.width, top: 8, bottom: Math.max(120, bottom) };
+  }
+  // Whole tree, padded clear of the overlays.
   function fit() {
     if (state.page !== 'trees') return;
-    const r = svg.getBoundingClientRect();
-    const k = Math.min(r.width / graph.width, r.height / graph.height, 1.2);
-    state.view = { k, x: (r.width - graph.width * k) / 2, y: (r.height - graph.height * k) / 2 };
+    const a = clearArea(), h = a.bottom - a.top;
+    const k = Math.min(a.w / graph.width, h / graph.height, 1.2);
+    state.view = { k, x: (a.w - graph.width * k) / 2, y: a.top + (h - graph.height * k) / 2 };
+    applyView();
+  }
+  // Opening view: the whole tree if it is readable, otherwise the start of the tree at a readable size.
+  function home() {
+    if (state.page !== 'trees') return;
+    const a = clearArea(), h = a.bottom - a.top;
+    const kFit = Math.min(a.w / graph.width, h / graph.height, 1.2);
+    if (kFit >= MIN_START_ZOOM) { fit(); return; }
+    const k = MIN_START_ZOOM;
+    // Centre vertically on the Start column, which every path begins from.
+    const first = graph.cols[0].map((id) => graph.layout.get(id).y);
+    const midY = (Math.min(...first) + Math.max(...first) + NODE_H) / 2;
+    state.view = { k, x: Math.max(16, (a.w - graph.width * k) / 2), y: a.top + h / 2 - midY * k };
     applyView();
   }
   function centerOn(id) {
     const p = graph.layout.get(id); if (!p) return;
-    const r = svg.getBoundingClientRect();
+    const a = clearArea();
     const k = Math.max(state.view.k, 0.8);
-    state.view = { k, x: r.width / 2 - (p.x + NODE_W / 2) * k, y: r.height / 2 - (p.y + NODE_H / 2) * k };
+    state.view = { k, x: a.w / 2 - (p.x + NODE_W / 2) * k, y: (a.top + a.bottom) / 2 - (p.y + NODE_H / 2) * k };
     applyView();
     const g = graph.nodeEls.get(id);
     g.classList.remove('flash'); void g.getBBox(); g.classList.add('flash');
@@ -438,27 +543,29 @@
     nav.replaceChildren();
     Object.keys(GAMES).forEach((key) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.role = 'tab'; b.textContent = GAMES[key].name;
-      b.setAttribute('aria-selected', key === state.game);
+      b.type = 'button'; b.textContent = GAMES[key].name;
+      b.setAttribute('aria-pressed', key === state.game);
       b.addEventListener('click', () => setGame(key));
       nav.appendChild(b);
     });
     const g = GAMES[state.game];
     const what = state.page === 'builds' ? ' Build Orders' : ' Tech Trees';
-    $('title').textContent = g.name + what;
     $('subtitle').textContent = g.sub;
+    document.body.dataset.game = state.game;
     $('footNote').textContent = g.foot;
     document.title = g.name + what;
   }
   function renderPageTabs() {
-    document.querySelectorAll('#pages button').forEach((b) => b.setAttribute('aria-selected', b.dataset.page === state.page));
+    document.querySelectorAll('#pages button').forEach((b) => {
+      if (b.dataset.page === state.page) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
     document.body.dataset.page = state.page;
   }
   function setPage(page) {
     if (page === state.page) return;
     state.page = page;
     renderPageTabs(); renderGameTabs(); writeHash();
-    if (page === 'trees') fit();
+    if (page === 'trees') { fitLabels(); state.selected ? centerOn(state.selected) : home(); }
     notify();
   }
   const listeners = [];
@@ -468,15 +575,15 @@
     state.game = key; DATA = GAMES[key].races;
     if (!DATA[state.race]) state.race = 'terran';
     state.selected = null;
-    renderGameTabs(); renderRaceTabs(); render(); fit(); notify();
+    renderGameTabs(); renderRaceTabs(); render(); home(); notify();
   }
   function renderRaceTabs() {
     const nav = $('races');
     nav.replaceChildren();
     Object.keys(DATA).forEach((key) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.role = 'tab'; b.textContent = DATA[key].name;
-      b.setAttribute('aria-selected', key === state.race);
+      b.type = 'button'; b.textContent = DATA[key].name;
+      b.setAttribute('aria-pressed', key === state.race);
       b.addEventListener('click', () => setRace(key));
       nav.appendChild(b);
     });
@@ -484,12 +591,17 @@
   }
   function setRace(key) {
     state.race = key; state.selected = null;
-    renderRaceTabs(); render(); fit(); notify();
+    renderRaceTabs(); render(); home(); notify();
   }
 
-  $('showUnits').addEventListener('change', (e) => { state.showUnits = e.target.checked; render(); fit(); });
-  $('showUpgrades').addEventListener('change', (e) => { state.showUpgrades = e.target.checked; render(); fit(); });
+  $('showUnits').addEventListener('change', (e) => { state.showUnits = e.target.checked; render(); home(); });
+  $('showUpgrades').addEventListener('change', (e) => { state.showUpgrades = e.target.checked; render(); home(); });
   $('fit').addEventListener('click', fit);
+  const zoomCenter = (f) => { const a = clearArea(); zoomAt(a.w / 2, (a.top + a.bottom) / 2, f); };
+  $('zoomIn').addEventListener('click', () => zoomCenter(1.25));
+  $('zoomOut').addEventListener('click', () => zoomCenter(0.8));
+  $('panelClose').addEventListener('click', () => select(null));
+  if (mobile()) $('legend').open = false;
   $('search').addEventListener('change', (e) => {
     const q = e.target.value.trim().toLowerCase();
     if (!q) return;
@@ -511,7 +623,13 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.page === 'trees') select(null);
   });
-  window.addEventListener('resize', () => fit());
+  let lastW = window.innerWidth;
+  window.addEventListener('resize', () => {
+    // Phones fire resize when the address bar hides; only re-frame on a real width change.
+    if (window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
+    home();
+  });
   document.querySelectorAll('#pages button').forEach((b) => b.addEventListener('click', () => setPage(b.dataset.page)));
 
   // Shared with the Build Orders page (bo.js).
@@ -528,6 +646,5 @@
   renderGameTabs();
   renderRaceTabs();
   render();
-  fit();
-  if (state.selected) centerOn(state.selected);
+  if (state.selected) centerOn(state.selected); else home();
 })();
