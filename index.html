@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StarCraft II Tech Trees</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <nav class="pages" id="pages" role="tablist" aria-label="Page">
+      <button type="button" role="tab" data-page="trees">Tech Trees</button>
+      <button type="button" role="tab" data-page="builds">Build Orders</button>
+    </nav>
+    <div class="brand">
+      <h1 id="title">StarCraft Tech Trees</h1>
+      <span class="sub" id="subtitle"></span>
+    </div>
+    <nav class="games" id="games" role="tablist" aria-label="Game"></nav>
+    <nav class="races" id="races" role="tablist" aria-label="Race"></nav>
+    <div class="controls tree-only">
+      <input id="search" type="search" placeholder="Find a unit, building or upgrade…" autocomplete="off" list="names">
+      <datalist id="names"></datalist>
+      <label class="toggle"><input type="checkbox" id="showUnits" checked> Units</label>
+      <label class="toggle"><input type="checkbox" id="showUpgrades" checked> Upgrades</label>
+      <button id="fit" type="button" title="Fit tree to screen">Fit</button>
+    </div>
+  </header>
+
+  <main class="layout tree-only">
+    <section class="stage" id="stage">
+      <svg id="tree" aria-label="Tech tree diagram">
+        <defs>
+          <clipPath id="iconClip"><rect x="13" y="5" width="34" height="34" rx="5"></rect></clipPath>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrowhead"></path>
+          </marker>
+        </defs>
+        <g id="viewport">
+          <g id="columns"></g>
+          <g id="edges"></g>
+          <g id="nodes"></g>
+        </g>
+      </svg>
+      <div class="legend">
+        <span><i class="sw building"></i>Building</span>
+        <span><i class="sw unit"></i>Unit</span>
+        <span><i class="sw upgrade"></i>Upgrade</span>
+        <span><i class="ln solid"></i>Built / researched at</span>
+        <span><i class="ln dashed"></i>Requires</span>
+        <span><i class="sec direct"></i>Unlocked directly</span>
+        <span><i class="sec addon"></i>Requires add-on (🔧)</span>
+        <span><i class="sec research"></i>Requires research (⚗)</span>
+      </div>
+      <div class="hint">Click a node to trace its path. Drag to pan, scroll to zoom.</div>
+    </section>
+
+    <aside class="panel" id="panel">
+      <div class="empty" id="panelEmpty">
+        <h2>Pick anything in the tree</h2>
+        <p>Selecting a node highlights everything you need to get there and everything it unlocks.</p>
+        <p class="muted">Columns read left to right as tech tiers: each item sits one step after its deepest prerequisite.</p>
+      </div>
+      <div id="panelBody" hidden></div>
+    </aside>
+  </main>
+
+  <main class="builds builds-only" id="buildView"></main>
+
+  <footer class="foot">Fan-made reference. <span id="footNote"></span> StarCraft artwork and trademarks belong to Blizzard Entertainment; icons via <a href="https://liquipedia.net">Liquipedia</a>.</footer>
+
+  <script src="data.js"></script>
+  <script src="data-bw.js"></script>
+  <script src="icons.js"></script>
+  <script src="buildorders.js"></script>
+  <script src="sim.js"></script>
+  <script src="app.js"></script>
+  <script src="bo.js"></script>
+</body>
+</html>
