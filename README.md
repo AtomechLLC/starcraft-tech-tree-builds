@@ -15,6 +15,7 @@ No build step: open `index.html` or serve the folder as static files. The includ
 | `buildorders.js` | Build order definitions |
 | `sim.js` | Economy simulator used for build order timings |
 | `app.js`, `bo.js` | Tech tree and Build Orders pages |
+| `map.js` | The selected build order played out on a map |
 | `icons/`, `icons.js` | Unit, building and upgrade icons |
 
 ## Notes

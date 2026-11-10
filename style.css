@@ -354,3 +354,16 @@ body[data-page="builds"] { height: auto; min-height: 100%; }
 .bo-table tr.worker-row td { color: var(--muted); background: rgba(255,255,255,.015); font-size: 12.5px; padding-top: 3px; padding-bottom: 3px; }
 .bo-table tr.worker-row .bo-item { color: var(--muted); cursor: default; }
 .bo-table tr.worker-row .bo-item img { width: 20px; height: 20px; opacity: .8; }
+
+/* Build played out on a map (map.js) */
+.map-wrap { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #0f1726; }
+.map-cv { display: block; width: 100%; cursor: pointer; }
+.map-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); background: rgba(17,24,39,.8); flex-wrap: wrap; }
+.map-bar button { font: 600 13px system-ui, sans-serif; color: var(--text); background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.map-bar button:hover { border-color: var(--accent); }
+.map-bar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.map-play { min-width: 40px; }
+.map-scrub { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.map-clock { font: 600 15px var(--display); letter-spacing: .03em; min-width: 84px; color: var(--muted); }
+.map-speeds { display: flex; gap: 4px; }
+.tl-now { position: absolute; top: 0; width: 2px; margin-left: -1px; background: var(--accent); box-shadow: 0 0 6px var(--accent); pointer-events: none; z-index: 2; }

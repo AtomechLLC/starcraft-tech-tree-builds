@@ -5,6 +5,7 @@
   const root = document.getElementById('buildView');
   const opts = { workerTarget: null, gasPerGeyser: 3, economy: {}, showWorkers: false };
   let ecoGame = null;
+  let player = null, playerKey = '', mapSpeed = 8, timelineNow = null;
 
   const fmt = (s) => {
     if (s == null) return '—';
@@ -94,7 +95,23 @@
       stat(sim.workers, `${workerName}s at the end`),
       stat(res(Math.round(sim.incomePerMin.m), Math.round(sim.incomePerMin.g)), 'Income per minute at the end')));
 
-    main.append(h('h3', { class: 'bo-sub' }, 'Timeline'), timeline(sim.rows, sim.finish));
+    // The build played out on a map, with the timeline's cursor following its clock.
+    const key = game + '/' + race + '/' + build.id;
+    const keep = player && playerKey === key ? { t: player.t, playing: player.playing } : null;
+    player?.destroy();
+    playerKey = key;
+    const tl = timeline(sim.rows, sim.finish);
+    player = window.SC_MAP.create({
+      sim, nodes, game, race, R: SIM.RACE[race], icon: App.icon, startWorkers: eco.startWorkers, gasPer: opts.gasPerGeyser,
+      workerId: SIM.RACE[race].worker, t: keep?.t ?? 0, speed: mapSpeed,
+      onSpeed: (v) => { mapSpeed = v; },
+      onTime: (t) => timelineNow?.(t),
+    });
+    main.append(h('h3', { class: 'bo-sub' }, 'Played out on the map'),
+      h('p', { class: 'muted small' }, `Each step goes up when the simulation above starts it: ${workerName}s mine, buildings rise in the main base, units gather at the ramp. Press play or drag the clock.`),
+      player.el);
+    if (keep?.playing) player.play();
+    main.append(h('h3', { class: 'bo-sub' }, 'Timeline'), tl);
     main.append(h('h3', { class: 'bo-sub' }, 'Steps'));
 
     // Steps, optionally interleaved with every worker in start-time order.
@@ -212,6 +229,15 @@
             title: `${name}: ${fmt(r.start)} to ${fmt(r.end)}`,
           })));
     }));
+    const now = h('i', { class: 'tl-now', 'aria-hidden': 'true' });
+    list.querySelector('.tl-row .tl-track')?.append(now);
+    timelineNow = (t) => {
+      const track = list.querySelector('.tl-track');
+      if (!track) return;
+      now.style.left = pct(Math.min(t, span));
+      now.style.height = (list.getBoundingClientRect().bottom - track.getBoundingClientRect().top) + 'px';
+      now.hidden = t <= 0;
+    };
     return h('div', { class: 'tl', role: 'img', 'aria-label': `Timeline of ${steps.length} steps, finishing at ${fmt(end)}` },
       h('div', { class: 'tl-head' }, h('span', {}), axis), list,
       h('div', { class: 'tl-key' },
