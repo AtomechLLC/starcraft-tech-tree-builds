@@ -64,7 +64,8 @@
     const main = h('section', { class: 'bo-main' });
     main.append(h('header', { class: 'bo-head' },
       h('div', {}, h('h2', {}, build.name), h('p', { class: 'muted' }, build.desc)),
-      h('p', { class: 'bo-matchup' }, h('span', { class: 'muted' }, 'Matchup'), h('strong', {}, build.matchup))));
+      h('div', { class: 'bo-matchup' }, h('span', { class: 'muted' }, 'Matchup'), h('strong', {}, build.matchup),
+        h('button', { type: 'button', class: 'to-sim-add', title: 'Load this build into the Simulator and watch it play out', onclick: () => { window.SCSim.load(build.id); App.go('sim'); } }, 'Open in Simulator ›'))));
 
     // Controls.
     const workerName = byId.get(SIM.RACE[race].worker).name;

@@ -4,6 +4,7 @@ A static fan reference site for **StarCraft II** (Legacy of the Void) and **Star
 
 - **Tech Trees:** interactive prerequisite diagrams for Terran, Protoss and Zerg. Click any building, unit or upgrade to trace what it needs and what it unlocks. Each tier separates what is unlocked directly, what needs an add-on, and what needs research.
 - **Build Orders:** common openers per race with total costs, estimated step timings, and how those timings shift with the number of workers you make.
+- **Simulator:** write a build by clicking a race's buildings, units and upgrades (or add them from the tech tree), then watch it play out on a map against another build: workers mine, buildings and units appear when the simulation makes them, and one side attacks at a chosen time. Fights are a rough model (army strength from resources spent, square law, a home advantage for the defender), not StarCraft's combat.
 
 No build step: open `index.html` or serve the folder as static files. The included GitHub Actions workflow deploys `main` to GitHub Pages.
 
@@ -15,6 +16,7 @@ No build step: open `index.html` or serve the folder as static files. The includ
 | `buildorders.js` | Build order definitions |
 | `sim.js` | Economy simulator used for build order timings |
 | `app.js`, `bo.js` | Tech tree and Build Orders pages |
+| `simpage.js` | Simulator page: build editor, map playback and the attack model |
 | `icons/`, `icons.js` | Unit, building and upgrade icons |
 
 ## Notes

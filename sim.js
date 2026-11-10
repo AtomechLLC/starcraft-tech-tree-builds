@@ -2,6 +2,9 @@
 // Model: workers are produced continuously (up to a cap) and each build step starts once its
 // supply trigger is reached, its prerequisites are finished and it can be afforded.
 // Mining rates are averages per worker per game second; see ECONOMY for the defaults.
+// Optional (used by the Simulator page): opts.until keeps the clock running after the last step,
+// opts.keep makes every production building keep training the build's units once the list is done,
+// and the result then also carries `extra` (those units) and `secs` (a snapshot per second).
 
 (function () {
   'use strict';
@@ -53,6 +56,7 @@
     const events = [];                     // {at, fn}
     const rows = steps.map((s) => ({ ...s, start: null, end: null, skipped: null }));
     const workerLog = [];                  // {start, end, sup} for every worker made
+    const extra = [], secs = [];           // keep-producing units; one snapshot per game second
     let next = 0;
 
     const inc = (m, id, d) => m.set(id, (m.get(id) || 0) + d);
@@ -136,6 +140,26 @@
       return 'started';
     }
 
+    // After the list: train another of a unit the build already makes, if anything is free and affordable.
+    function tryKeep(n) {
+      if ((n.req || []).some((id) => !has(id)) || !has(n.from)) return false;
+      const viaLarva = /^Larva/.test(n.via || '');
+      let prodIdx = -1, larvaIdx = -1;
+      if (viaLarva) { larvaIdx = larvaSource(); if (larvaIdx < 0) return false; }
+      else { prodIdx = freeProducer(n.from); if (prodIdx < 0) return false; }
+      if (min < (n.m || 0) || gas < (n.g || 0)) return false;
+      min -= n.m || 0; gas -= n.g || 0;
+      const dur = T(n);
+      if (viaLarva) larva[larvaIdx].n--; else producers.get(n.from)[prodIdx] = t + dur;
+      armySupply += n.sup || 0;
+      inc(pending, n.id, 1);
+      extra.push({ id: n.id, start: t, end: t + dur, node: n });
+      later(t + dur, () => complete(n));
+      return true;
+    }
+    const keepIds = opts.keep ? [...new Set(rows.filter((r) => r.node && r.node.t === 'u' && r.id !== R.worker && r.node.from && !/Calldown/.test(r.node.via || '')
+      && byId.get(r.node.from)?.t === 'b').map((r) => r.id))] : [];
+
     function tryWorker() {
       if (workers + workersInProd >= target) return;
       if (min < workerNode.m) return;
@@ -155,7 +179,7 @@
       later(t + dur, () => { workersInProd--; workers++; });
     }
 
-    const dt = 0.25, LIMIT = 20 * 60;
+    const dt = 0.25, LIMIT = Math.max(20 * 60, opts.until || 0);
     while (t <= LIMIT) {
       // Finish anything due.
       events.sort((a, b) => a.at - b.at);
@@ -188,14 +212,16 @@
         break;
       }
       if (allowWorkers) tryWorker();
+      if (next >= rows.length && keepIds.length) keepIds.forEach((id) => tryKeep(byId.get(id)));
 
-      if (next >= rows.length && rows.every((r) => r.skipped || (r.end != null && r.end <= t))) break;
+      if (Math.abs(t - Math.round(t)) < 1e-9) secs.push({ t, workers, gasWorkers, busy, min, gas, bases, armySupply });
+      if (next >= rows.length && rows.every((r) => r.skipped || (r.end != null && r.end <= t)) && !(opts.until && t < opts.until)) break;
       t += dt;
     }
 
     const started = rows.filter((r) => r.start != null);
     return {
-      rows, workerLog, startWorkers: eco.startWorkers,
+      rows, workerLog, extra, secs, startWorkers: eco.startWorkers,
       finish: started.length ? Math.max(...started.map((r) => r.end)) : 0,
       lastStart: started.length ? Math.max(...started.map((r) => r.start)) : 0,
       workers: workers + workersInProd,
