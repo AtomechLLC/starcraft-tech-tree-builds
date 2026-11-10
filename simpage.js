@@ -97,11 +97,14 @@
   const presets = (game, race) => (BUILDS[game] || {})[race] || [];
   const expand = (steps) => steps.flatMap(([sup, id, count = 1]) => Array.from({ length: count }, () => [sup, id]));
   const myKey = (game, race) => `sctt-sim/${game}/${race}`;
+  // The planned build is the one picked on the Build Orders tab (or in the URL: #game/race/sim/buildId).
+  // The Simulator plays it until you edit it; then your edited copy is kept until you reset it.
+  const planned = (game, race) => presets(game, race).find((p) => p.id === App.state.build) || presets(game, race)[0] || null;
   function myBuild(game, race) {
     const saved = store.get(myKey(game, race), null);
-    if (saved && Array.isArray(saved.steps)) return saved;
-    const p = presets(game, race)[0];
-    return { steps: p ? expand(p.steps) : [], from: p ? p.id : null };
+    if (saved && saved.custom && Array.isArray(saved.steps)) return saved;
+    const p = planned(game, race);
+    return { steps: p ? expand(p.steps) : [], from: p ? p.id : null, custom: false, cap: saved?.cap, keep: saved?.keep };
   }
   const saveMine = (game, race, b) => store.set(myKey(game, race), b);
   const defaultCap = (game) => (game === 'bw' ? 30 : 44);
@@ -731,16 +734,16 @@
     mine.steps.forEach(([sup, id], i) => {
       const n = nodes.find((x) => x.id === id), r = rows[i], src = iconSrc(game, race, id);
       const supIn = h('input', { type: 'number', min: 1, max: 200, value: sup, 'aria-label': 'Supply trigger', class: 'sim-sup' });
-      supIn.addEventListener('change', () => { mine.steps[i][0] = Math.max(1, +supIn.value || 1); refresh(); });
+      supIn.addEventListener('change', () => { mine.steps[i][0] = Math.max(1, +supIn.value || 1); edited(); });
       supIn.addEventListener('click', (e) => e.stopPropagation());
       list.append(h('li', { class: (ui.sel === i ? 'sel ' : '') + (r && r.skipped ? 'skipped' : ''), onclick: () => { ui.sel = ui.sel === i ? null : i; renderEditor(); } },
         supIn, src ? h('img', { src, alt: '' }) : h('span', { class: 'sim-noicon' }),
         h('span', { class: 'sim-name' }, n ? n.name : id, r && r.skipped ? h('small', { class: 'warn' }, r.skipped) : null),
         h('span', { class: 'sim-time' }, r && r.start != null ? fmt(r.start) : '—'),
         h('span', { class: 'sim-btns' },
-          h('button', { type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0 ? '' : null, onclick: (e) => { e.stopPropagation(); [mine.steps[i - 1], mine.steps[i]] = [mine.steps[i], mine.steps[i - 1]]; ui.sel = i - 1; refresh(); } }, '↑'),
-          h('button', { type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === mine.steps.length - 1 ? '' : null, onclick: (e) => { e.stopPropagation(); [mine.steps[i + 1], mine.steps[i]] = [mine.steps[i], mine.steps[i + 1]]; ui.sel = i + 1; refresh(); } }, '↓'),
-          h('button', { type: 'button', title: 'Remove', 'aria-label': 'Remove', onclick: (e) => { e.stopPropagation(); mine.steps.splice(i, 1); ui.sel = null; refresh(); } }, '×'))));
+          h('button', { type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0 ? '' : null, onclick: (e) => { e.stopPropagation(); [mine.steps[i - 1], mine.steps[i]] = [mine.steps[i], mine.steps[i - 1]]; ui.sel = i - 1; edited(); } }, '↑'),
+          h('button', { type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === mine.steps.length - 1 ? '' : null, onclick: (e) => { e.stopPropagation(); [mine.steps[i + 1], mine.steps[i]] = [mine.steps[i], mine.steps[i + 1]]; ui.sel = i + 1; edited(); } }, '↓'),
+          h('button', { type: 'button', title: 'Remove', 'aria-label': 'Remove', onclick: (e) => { e.stopPropagation(); mine.steps.splice(i, 1); ui.sel = null; edited(); } }, '×'))));
     });
     if (!mine.steps.length) list.append(h('li', { class: 'muted sim-empty' }, 'Empty. Click items below to add steps.'));
 
@@ -759,8 +762,10 @@
     const pre = h('select', { 'aria-label': 'Start from a common build', onchange: (e) => {
       const v = e.target.value; if (!v) return;
       const p = presets(game, race).find((x) => x.id === v);
-      mine = { steps: v === '__empty' ? [] : expand(p.steps), from: v, cap: mine.cap, keep: mine.keep }; ui.sel = null; refresh();
-    } }, h('option', { value: '' }, 'Start from…'), presets(game, race).map((p) => h('option', { value: p.id }, p.name)), h('option', { value: '__empty' }, 'Empty build'));
+      if (v === '__empty') mine = { steps: [], from: null, custom: true, cap: mine.cap, keep: mine.keep };
+      else { mine = { steps: expand(p.steps), from: v, custom: false, cap: mine.cap, keep: mine.keep }; App.setBuild(v); }
+      ui.sel = null; refresh();
+    } }, h('option', { value: '' }, 'Play another build…'), presets(game, race).map((p) => h('option', { value: p.id }, p.name)), h('option', { value: '__empty' }, 'Empty build'));
     const cap = mine.cap ?? defaultCap(game);
     const workerName = nodes.find((n) => n.id === SIM.RACE[race].worker).name;
     const capIn = h('input', { type: 'range', min: SIM.ECONOMY[game].startWorkers, max: 80, value: cap });
@@ -769,8 +774,17 @@
     capIn.addEventListener('change', () => { mine.cap = +capIn.value; refresh(); });
     const keep = h('input', { type: 'checkbox' }); keep.checked = mine.keep ?? true;
     keep.addEventListener('change', () => { mine.keep = keep.checked; refresh(); });
+    const base = presets(game, race).find((p) => p.id === mine.from);
+    const status = mine.custom
+      ? h('div', { class: 'sim-playing edited' }, h('span', {}, base ? `Your edit of ${base.name}` : 'Your own build'),
+        h('button', { type: 'button', class: 'link', onclick: () => { mine = { steps: [], custom: false, cap: mine.cap, keep: mine.keep }; saveMine(game, race, { custom: false, cap: mine.cap, keep: mine.keep }); mine = myBuild(game, race); ui.sel = null; refresh(); } },
+          `Reset to ${planned(game, race)?.name || 'the planned build'}`))
+      : h('div', { class: 'sim-playing' }, h('span', {}, 'Playing the planned build: ', h('b', {}, base ? base.name : '—')),
+        base ? h('span', { class: 'muted small' }, base.matchup + ' · ' + base.desc) : null,
+        h('button', { type: 'button', class: 'link', onclick: () => App.go('builds') }, 'See its timings on Build Orders ›'));
     els.editor.replaceChildren(
       h('div', { class: 'sim-ed-head' }, h('h3', {}, 'Your build'), pre),
+      status,
       h('p', { class: 'muted small' }, ui.sel == null ? 'New steps go at the end. Click a step to insert after it.' : `New steps go after step ${ui.sel + 1}.`),
       list,
       h('div', { class: 'sim-opts' },
@@ -785,9 +799,10 @@
     const sup = prev ? prev[0] : SIM.ECONOMY[App.state.game].startWorkers;
     mine.steps.splice(at, 0, [sup, id]);
     ui.sel = at;
-    refresh();
+    edited();
   }
   function refresh() { rerun(); renderEditor(); }
+  function edited() { mine.custom = true; refresh(); }
 
   function renderOpp() {
     const game = App.state.game, opts = oppOptions(game);
@@ -812,6 +827,8 @@
       if (!ui.oppRace || !DATA[game][ui.oppRace] || ui.oppGame !== game) { ui.oppRace = rs[(rs.indexOf(race) + 2) % rs.length]; ui.oppBuild = presets(game, ui.oppRace)[0]?.id; ui.oppGame = game; }
       build();
     }
+    if (!mine.custom && mine.from !== planned(game, race)?.id) { mine = myBuild(game, race); ui.sel = null; }
+    if (!mine.custom && mine.from && App.state.build !== mine.from) App.setBuild(mine.from);
     rerun(); renderEditor(); renderOpp();
   }
   function build() {
@@ -844,6 +861,7 @@
       const game = App.state.game, race = App.state.race, b = myBuild(game, race);
       const prev = b.steps[b.steps.length - 1];
       b.steps.push([prev ? prev[0] : SIM.ECONOMY[game].startWorkers, id]);
+      b.custom = true;
       saveMine(game, race, b);
       if (ui.game === game && ui.race === race) mine = b;
       return b.steps.length;
@@ -851,9 +869,10 @@
     load(buildId) {
       const game = App.state.game, race = App.state.race, p = presets(game, race).find((x) => x.id === buildId);
       if (!p) return;
-      const b = { steps: expand(p.steps), from: p.id };
-      saveMine(game, race, b);
-      ui.game = null;   // rebuild from the saved build when the page opens
+      const old = store.get(myKey(game, race), null) || {};
+      saveMine(game, race, { custom: false, cap: old.cap, keep: old.keep });
+      App.setBuild(p.id);
+      ui.game = null;   // rebuild from the planned build when the page opens
     },
   };
 

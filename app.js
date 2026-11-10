@@ -54,13 +54,13 @@
     const okRace = !!g.races[race];
     const base = { game: GAMES[game] ? game : 'sc2', race: okRace ? race : 'terran' };
     if (node === 'builds') return { ...base, page: 'builds', build: build || null };
-    if (node === 'sim') return { ...base, page: 'sim' };
+    if (node === 'sim') return { ...base, page: 'sim', build: build || null };
     return { ...base, node: okRace ? node : null, page: 'trees' };
   }
   function writeHash() {
     const h = '#' + state.game + '/' + state.race + (state.page === 'builds'
       ? '/builds' + (state.build ? '/' + state.build : '')
-      : state.page === 'sim' ? '/sim'
+      : state.page === 'sim' ? '/sim' + (state.build ? '/' + state.build : '')
       : (state.selected ? '/' + state.selected : ''));
     if (location.hash !== h) history.replaceState(null, '', h);
   }
