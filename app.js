@@ -54,11 +54,13 @@
     const okRace = !!g.races[race];
     const base = { game: GAMES[game] ? game : 'sc2', race: okRace ? race : 'terran' };
     if (node === 'builds') return { ...base, page: 'builds', build: build || null };
+    if (node === 'sim') return { ...base, page: 'sim' };
     return { ...base, node: okRace ? node : null, page: 'trees' };
   }
   function writeHash() {
     const h = '#' + state.game + '/' + state.race + (state.page === 'builds'
       ? '/builds' + (state.build ? '/' + state.build : '')
+      : state.page === 'sim' ? '/sim'
       : (state.selected ? '/' + state.selected : ''));
     if (location.hash !== h) history.replaceState(null, '', h);
   }
@@ -396,6 +398,17 @@
     stat('', n.time ? n.time + 's' : '—', n.t === 'g' ? 'Research time' : 'Build time');
     if (n.t === 'u') stat('', n.sup ?? 0, 'Supply');
     body.appendChild(stats);
+    if (n.id !== 'nuke') {
+      const row = document.createElement('div'); row.className = 'to-sim';
+      const add = document.createElement('button'); add.type = 'button'; add.className = 'to-sim-add';
+      add.textContent = '+ Add to my simulator build';
+      const open = document.createElement('button'); open.type = 'button'; open.className = 'link'; open.textContent = 'Open Simulator ›';
+      open.addEventListener('click', () => setPage('sim'));
+      const msg = document.createElement('span'); msg.className = 'muted small';
+      add.addEventListener('click', () => { const k = window.SCSim.add(id); msg.textContent = 'Added as step ' + k + '.'; });
+      row.append(add, open, msg);
+      body.appendChild(row);
+    }
 
     const fromLabel = n.t === 'g' ? 'Researched at' : n.via === 'Add-on' ? 'Add-on for' :(n.via && /Morph|Merge|Upgrade/.test(n.via)) ? 'Morphs from' : 'Built / trained at';
     if (n.from) section(body, fromLabel, [chip(n.from, n.via)]);
@@ -549,7 +562,7 @@
       nav.appendChild(b);
     });
     const g = GAMES[state.game];
-    const what = state.page === 'builds' ? ' Build Orders' : ' Tech Trees';
+    const what = state.page === 'builds' ? ' Build Orders' : state.page === 'sim' ? ' Build Simulator' : ' Tech Trees';
     $('subtitle').textContent = g.sub;
     document.body.dataset.game = state.game;
     $('footNote').textContent = g.foot;
@@ -640,6 +653,7 @@
     onChange: (fn) => listeners.push(fn),
     setBuild: (id) => { state.build = id; writeHash(); },
     openInTree: (id) => { setPage('trees'); select(id, true); },
+    go: setPage,
   };
 
   renderPageTabs();
